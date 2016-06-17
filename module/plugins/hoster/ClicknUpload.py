@@ -2,6 +2,7 @@
 
 import re
 import time
+import codecs
 
 from module.network.HTTPRequest import BadHeader
 from module.plugins.internal.Hoster import Hoster
@@ -12,7 +13,7 @@ class ClicknUpload(Hoster):
     __version__ = "0.02"
     __status__  = "testing"
 
-    __pattern__ = r'http://(?:www\.)?clicknupload\.(?:com|me|link)/\w{12}'
+    __pattern__ = r'https?://(?:www\.)?clicknupload\.(?:com|me|link)/\w{12}'
 
     __description__ = """Clicknupload.com hoster plugin"""
     __authors__ = [("tbsn", "tbsnpy_github@gmx.de")]
@@ -23,7 +24,7 @@ class ClicknUpload(Hoster):
     __license__     = "GPLv3"
 
     BADHEADER_PATTERN = r'Refresh: (?P<refresh_timeout>\w+);URL=(?P<refresh_link>\S+)'
-    DIRECTLINK_PATTERN = r'<a (href="javascript:void\(0\);")? onClick="window.open\(\'(?P<direct_link>\S+)\'\);"'
+    DIRECTLINK_PATTERN = r'(href="javascript:void\(0\);")? onClick="window.open\(\'(?P<direct_link>\S+)\'\);"'
     
     """
     @function processBadHeader()
@@ -110,13 +111,20 @@ class ClicknUpload(Hoster):
     def handleDownloadPage(self, post=None ):
         retVal = 0
         downloadPage = ""
+        
                 
         # Try to load page with supplied 'post' parameters
         try:
 
             downloadPage = self.load( self.pyfile.url , post=post )
             
+            fd = codecs.open( "/tmp/http_" + str(self.logNum) + ".log" , 'w' , encoding='utf-8')
+            fd.write(downloadPage)
+            fd.close()
+            self.logNum = self.logNum + 1
+            
             if( "File Download Link Generated" in downloadPage ):
+                print "#######Search for download link##########"
                 m = re.search(ClicknUpload.DIRECTLINK_PATTERN, downloadPage )
                 if( None != m ):
                     self.directLink = m.group('direct_link')
@@ -139,9 +147,12 @@ class ClicknUpload(Hoster):
             self.extendPostList( downloadPage, post, "fname" )
             self.extendPostList( downloadPage, post, "referer" )
             self.extendPostList( downloadPage, post, "rand" )
+            self.extendPostList( downloadPage, post, "method_free" )
 
-            post['method_free'] = "Free Download"
+            post['method_free'] = "Free Download >>"
             post['usr_login'] = ""
+            post['referer'] = self.pyfile.url
+            
             
             opVal = ""
             fnameVal = ""
@@ -156,7 +167,12 @@ class ClicknUpload(Hoster):
                 self.log_debug("Wait 6 seconds before proceeding")
                 time.sleep(6)
                 # Set referrer
+                del post['usr_login']
                 post['referer'] = self.pyfile.url
+                post['method_premium'] = ""
+                post['rand'] = ""
+
+                
             
             # Store file name to pyfile object
             if( "" != fnameVal ):
@@ -178,10 +194,13 @@ class ClicknUpload(Hoster):
         # Variable to hold the extracted direct link
         self.directLink = None
 
+        self.logNum = 0
+
         # Clickandupload redirects clickandupload.me and clickandupload.com links
         # to clickandupload.link
         # Rename them here, to prevent issues with the referrer
         pyfile.url = re.sub( r'clicknupload.(me|com)', r'clicknupload.link', pyfile.url )
+        pyfile.url = re.sub( r'http:', r'https:', pyfile.url )
 
         post = dict()
         
